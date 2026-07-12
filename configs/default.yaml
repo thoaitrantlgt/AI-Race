@@ -1,0 +1,137 @@
+paths:
+  terminology_dir: data/terminology
+  rxnorm_dir: data/terminology/rxnorm_2026
+  icd10_vi_dir: data/terminology/icd10_vi
+  snomed_dir: data/terminology/snomed
+  alias_dir: data/terminology/custom_aliases
+
+pipeline:
+  use_rule_extractor: true
+  use_model_extractor: true
+  preserve_exact_matches: false
+  enrich_exact_matches: true
+  use_sapbert_ranker: false
+  use_assertion_classifier: false
+  model_path: data/models/pseudo_ner_model.json
+
+models:
+  parameter_budget_billion: 9.0
+  ensemble_exact_records: true
+  llm:
+    enabled: true
+    provider: openai_compatible
+    base_url: http://127.0.0.1:8000/v1
+    model: Qwen/Qwen3-8B
+    active_parameters_billion: 8.2
+    api_key_env: LLM_API_KEY
+    timeout_seconds: 180
+    temperature: 0.0
+    max_tokens: 4096
+    response_format_json: true
+    confidence: 0.93
+  transformer_ner_models:
+    - name: "vietmed_ner"
+      model_name_or_path: "data/models/phobert-base-v2-VietMed-NER"
+      enabled: false
+      active_parameters_billion: 0.135
+      local_files_only: true
+      device: -1
+      min_score: 0.50
+      chunk_chars: 320
+      chunk_overlap: 48
+      batch_size: 8
+      aggregation_strategy: "simple"
+      source: "vietmed_ner"
+    - name: "xlmr_ner"
+      model_name_or_path: "C:/Users/Admin/.cache/huggingface/hub/models--leduckhai--VietMed-NER/snapshots/cccffb7de14423114f7d4bafc9f736b9d866e446/xlm-roberta-base-VietMed-NER"
+      enabled: true
+      active_parameters_billion: 0.278
+      local_files_only: true
+      device: -1
+      min_score: 0.60
+      chunk_chars: 600
+      chunk_overlap: 64
+      batch_size: 8
+      aggregation_strategy: "simple"
+      source: "xlmr_ner"
+    - name: "phobert_ner"
+      model_name_or_path: "vinai/phobert-base-v2"
+      enabled: false
+      active_parameters_billion: 0.135
+      local_files_only: true
+      device: -1
+      min_score: 0.60
+      aggregation_strategy: "simple"
+      source: "phobert_ner"
+  sapbert:
+    enabled: false
+    model_name_or_path: "BAAI/bge-reranker-v2-m3"
+    local_files_only: true
+    weight: 0.18
+  assertion_classifier:
+    enabled: true
+    model_name_or_path: "data/models/assertion_classifier.pkl"
+    local_files_only: true
+
+extraction:
+  min_span_length: 2
+  max_span_length: 120
+  allow_overlapping_spans: false
+  medication_include_dose: true
+  min_confidence: 0.72
+
+linking:
+  max_candidates: 2
+  high_confidence_threshold: 0.88
+  medium_confidence_threshold: 0.72
+  augment_model_candidates: true
+  contextual_reranking: false
+  enable_rxnorm: true
+  rxnorm_version: "2026"
+  enable_icd10_vi: true
+  icd10_language: "vi"
+  enable_snomed: false
+
+assertion:
+  default_label: "present"
+  scope_repair: true
+  repair_family: true
+  repair_negated: false
+  repair_historical: false
+  assertion_labels:
+    present: "isPresent"
+    historical: "isHistorical"
+    negated: "isNegated"
+    possible: "isPossible"
+    family: "isFamily"
+  historical_sections:
+    - "past_history"
+    - "medication_history"
+  negation_cues:
+    - "không"
+    - "không ghi nhận"
+    - "không có"
+    - "chưa ghi nhận"
+    - "phủ nhận"
+  speculation_cues:
+    - "nghi ngờ"
+    - "theo dõi"
+    - "khả năng"
+    - "có thể"
+  family_cues:
+    - "gia đình"
+    - "bố"
+    - "mẹ"
+
+output:
+  output_dir: output
+  zip_name: output.zip
+  ensure_ascii: false
+  indent: 2
+
+labels:
+  drug: "THUỐC"
+  diagnosis: "CHẨN_ĐOÁN"
+  symptom: "TRIỆU_CHỨNG"
+  lab_test: "TÊN_XÉT_NGHIỆM"
+  lab_result: "KẾT_QUẢ_XÉT_NGHIỆM"

@@ -1,0 +1,6 @@
+pyyaml
+regex
+rapidfuzz
+tqdm
+numpy
+pandas
