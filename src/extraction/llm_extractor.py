@@ -108,6 +108,38 @@ class LlmExtractor(BaseExtractor):
             start = occurrences[0]
         return start, start + len(mention)
 
+    @staticmethod
+    def _normalize_assertions(assertions) -> list[str]:
+        if assertions is None:
+            return []
+        if not isinstance(assertions, list):
+            assertions = [assertions]
+
+        normalized: list[str] = []
+        seen: set[str] = set()
+        for value in assertions:
+            candidate = ""
+            if isinstance(value, str):
+                candidate = value.strip()
+            elif isinstance(value, dict):
+                for key in ("value", "name", "type", "label", "assertion"):
+                    nested_value = value.get(key)
+                    if isinstance(nested_value, str):
+                        candidate = nested_value.strip()
+                        break
+                if not candidate:
+                    for label in VALID_ASSERTIONS:
+                        if value.get(label) is True and label not in seen:
+                            normalized.append(label)
+                            seen.add(label)
+            elif value is not None:
+                candidate = str(value).strip()
+
+            if candidate in VALID_ASSERTIONS and candidate not in seen:
+                normalized.append(candidate)
+                seen.add(candidate)
+        return normalized
+
     def extract(self, record, sections) -> list[SpanPrediction]:
         if not self.available:
             return []
@@ -134,7 +166,7 @@ class LlmExtractor(BaseExtractor):
             if key in seen:
                 continue
             seen.add(key)
-            assertions = [value for value in item.get("assertions", []) if value in VALID_ASSERTIONS]
+            assertions = self._normalize_assertions(item.get("assertions", []))
             if concept_type not in {"symptom", "diagnosis", "drug"}:
                 assertions = []
             spans.append(

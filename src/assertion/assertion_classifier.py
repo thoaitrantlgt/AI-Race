@@ -22,10 +22,16 @@ class AssertionClassifier:
         if not model_path:
             return
         if str(model_path).endswith(".pkl") and Path(model_path).exists():
-            with Path(model_path).open("rb") as handle:
-                self.sklearn_model = pickle.load(handle)
-            self.enabled = True
-            return
+            try:
+                with Path(model_path).open("rb") as handle:
+                    self.sklearn_model = pickle.load(handle)
+                self.enabled = True
+                return
+            except Exception as exc:
+                print(f"Warning: could not load assertion classifier pickle {model_path}: {exc}")
+                self.sklearn_model = None
+                self.enabled = False
+                return
         if local_files_only and not Path(model_path).exists() and "/" not in model_path:
             return
         try:

@@ -1,3 +1,4 @@
+from src.assertion.assertion_classifier import AssertionClassifier
 from src.extraction.llm_extractor import LlmExtractor
 from src.io.read_input import InputRecord
 from src.main import validate_parameter_budget
@@ -15,6 +16,37 @@ def test_llm_extractor_parses_and_aligns_exact_mentions():
     spans = extractor.extract(record, [])
     assert [(span.text, span.concept_type) for span in spans] == [("không ho", "symptom"), ("aspirin", "drug")]
     assert spans[0].assertions == ["isNegated"]
+
+
+def test_llm_extractor_ignores_nested_assertion_dicts():
+    extractor = LlmExtractor({"enabled": True})
+    extractor._request = lambda _: """{
+      "entities": [
+        {"text":"ho", "position":[0,2], "type":"TRIỆU_CHỨNG", "assertions":[{"value":"isNegated"}, {"name":"isFamily"}, "isHistorical", {"bad": "value"}]}
+      ]
+    }"""
+    record = InputRecord("1", "1.txt", "ho")
+    spans = extractor.extract(record, [])
+    assert spans[0].assertions == ["isNegated", "isFamily", "isHistorical"]
+
+
+def test_llm_extractor_accepts_boolean_assertion_objects():
+    extractor = LlmExtractor({"enabled": True})
+    extractor._request = lambda _: """{
+      "entities": [
+        {"text":"ho", "position":[0,2], "type":"TRIỆU_CHỨNG", "assertions":{"isNegated":true,"isFamily":false}}
+      ]
+    }"""
+    spans = extractor.extract(InputRecord("1", "1.txt", "ho"), [])
+    assert spans[0].assertions == ["isNegated"]
+
+
+def test_assertion_classifier_handles_invalid_pickle(tmp_path):
+    bad_model = tmp_path / "bad.pkl"
+    bad_model.write_bytes(b"not a valid pickle")
+    classifier = AssertionClassifier(str(bad_model))
+    assert classifier.enabled is False
+    assert classifier.sklearn_model is None
 
 
 def test_parameter_budget_accepts_qwen3_and_xlmr():

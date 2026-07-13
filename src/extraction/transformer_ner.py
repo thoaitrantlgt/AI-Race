@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from pathlib import Path
 
 from src.io.schema import SpanPrediction
 
@@ -54,6 +55,11 @@ class TransformerNerExtractor:
         self.enabled = False
         self.pipeline = None
         if not config.enabled:
+            return
+        model_path = config.model_name_or_path
+        looks_local = Path(model_path).is_absolute() or model_path.startswith((".", "data/", "data\\"))
+        if config.local_files_only and looks_local and not Path(model_path).exists():
+            print(f"Warning: local transformer NER checkpoint not found, skipping: {model_path}")
             return
         try:
             from transformers import AutoModelForTokenClassification, AutoTokenizer, pipeline
