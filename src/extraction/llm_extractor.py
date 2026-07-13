@@ -36,6 +36,7 @@ class LlmExtractor(BaseExtractor):
         self.enabled = bool(self.config.get("enabled", False))
         self.available = self.enabled
         self.warned = False
+        self.parse_warnings = 0
 
     def _endpoint(self) -> str:
         base_url = str(self.config.get("base_url", "http://127.0.0.1:8000/v1")).rstrip("/")
@@ -76,15 +77,52 @@ class LlmExtractor(BaseExtractor):
         try:
             payload = json.loads(cleaned)
         except json.JSONDecodeError:
-            start = cleaned.find("{")
-            end = cleaned.rfind("}")
-            if start < 0 or end <= start:
-                return []
-            payload = json.loads(cleaned[start : end + 1])
+            return LlmExtractor._recover_entities(cleaned)
         if isinstance(payload, list):
             return [item for item in payload if isinstance(item, dict)]
         entities = payload.get("entities", []) if isinstance(payload, dict) else []
+        if isinstance(entities, dict):
+            entities = [entities]
         return [item for item in entities if isinstance(item, dict)]
+
+    @staticmethod
+    def _recover_entities(content: str) -> list[dict]:
+        entities_match = re.search(r'"entities"\s*:\s*\[', content)
+        array_start = entities_match.end() if entities_match else content.find("[") + 1
+        if array_start <= 0:
+            return []
+        recovered: list[dict] = []
+        object_start: int | None = None
+        depth = 0
+        in_string = False
+        escaped = False
+        for index in range(array_start, len(content)):
+            char = content[index]
+            if in_string:
+                if escaped:
+                    escaped = False
+                elif char == "\\":
+                    escaped = True
+                elif char == '"':
+                    in_string = False
+                continue
+            if char == '"':
+                in_string = True
+            elif char == "{":
+                if depth == 0:
+                    object_start = index
+                depth += 1
+            elif char == "}" and depth:
+                depth -= 1
+                if depth == 0 and object_start is not None:
+                    try:
+                        item = json.loads(content[object_start : index + 1])
+                    except json.JSONDecodeError:
+                        item = None
+                    if isinstance(item, dict):
+                        recovered.append(item)
+                    object_start = None
+        return recovered
 
     @staticmethod
     def _align(raw_text: str, mention: str, proposed) -> tuple[int, int] | None:
@@ -144,13 +182,23 @@ class LlmExtractor(BaseExtractor):
         if not self.available:
             return []
         try:
-            items = self._parse_json(self._request(record.raw_text))
+            content = self._request(record.raw_text)
         except Exception as exc:
             self.available = False
             if not self.warned:
                 print(f"Warning: LLM extractor disabled after server error: {exc}")
                 self.warned = True
             return []
+        try:
+            items = self._parse_json(content)
+        except Exception as exc:
+            items = []
+            if self.parse_warnings < 5:
+                print(f"Warning: skipped malformed LLM JSON for record {record.record_id}: {exc}")
+                self.parse_warnings += 1
+        if not items and content.strip() and self.parse_warnings < 5:
+            print(f"Warning: no recoverable LLM entities for record {record.record_id}; continuing with local sources")
+            self.parse_warnings += 1
         spans: list[SpanPrediction] = []
         seen: set[tuple[int, int, str]] = set()
         for item in items:

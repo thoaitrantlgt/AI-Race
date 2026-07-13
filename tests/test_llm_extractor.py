@@ -41,6 +41,16 @@ def test_llm_extractor_accepts_boolean_assertion_objects():
     assert spans[0].assertions == ["isNegated"]
 
 
+def test_llm_extractor_recovers_complete_entities_from_truncated_json():
+    content = """{"entities":[
+      {"text":"ho","position":[0,2],"type":"TRIỆU_CHỨNG","assertions":[]},
+      {"text":"sốt","position":[6,9],"type":"TRIỆU_CHỨNG","assertions":[]},
+      {"text":"đau bụng","position":[12
+    """
+    entities = LlmExtractor._parse_json(content)
+    assert [entity["text"] for entity in entities] == ["ho", "sốt"]
+
+
 def test_assertion_classifier_handles_invalid_pickle(tmp_path):
     bad_model = tmp_path / "bad.pkl"
     bad_model.write_bytes(b"not a valid pickle")
