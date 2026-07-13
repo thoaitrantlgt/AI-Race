@@ -27,7 +27,7 @@ models:
     max_tokens: 4096
     response_format_json: true
     confidence: 0.93
-    mode: consensus
+    mode: consensus_structured_labs
   assertion_classifier:
     enabled: true
     model_name_or_path: data/models/assertion_classifier.pkl

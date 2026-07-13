@@ -22,6 +22,7 @@ from src.postprocess.overlap_resolver import resolve_overlaps
 from src.postprocess.span_filter import filter_low_value_spans
 from src.postprocess.type_resolver import resolve_types
 from src.preprocess.section_parser import parse_sections
+from src.preprocess.text_normalizer import fold_for_matching
 
 
 DEFAULT_CONFIG = {
@@ -97,11 +98,43 @@ def validate_parameter_budget(config: dict) -> float:
     return total
 
 
-def filter_llm_spans(llm_spans, local_spans, mode: str):
+def _inside_structured_lab_block(span, raw_text: str) -> bool:
+    before = fold_for_matching(raw_text[max(0, span.start - 1200) : span.start])
+    lab_heading = max(
+        before.rfind("ket qua xet nghiem"),
+        before.rfind("xet nghiem can lam sang"),
+        before.rfind("laboratory results"),
+    )
+    if lab_heading < 0:
+        return False
+    later_heading = max(
+        before.rfind("ket qua chan doan hinh anh"),
+        before.rfind("chan doan hinh anh"),
+        before.rfind("chan doan"),
+        before.rfind("danh gia"),
+        before.rfind("dieu tri"),
+        before.rfind("thuoc"),
+        before.rfind("ke hoach"),
+    )
+    return lab_heading > later_heading
+
+
+def filter_llm_spans(llm_spans, local_spans, mode: str, raw_text: str = ""):
     if mode == "augment":
         return llm_spans
     local_keys = {(span.start, span.end, span.concept_type) for span in local_spans}
-    return [span for span in llm_spans if (span.start, span.end, span.concept_type) in local_keys]
+    accepted = []
+    for span in llm_spans:
+        if (span.start, span.end, span.concept_type) in local_keys:
+            accepted.append(span)
+            continue
+        if (
+            mode == "consensus_structured_labs"
+            and span.concept_type in {"lab_test", "lab_result"}
+            and _inside_structured_lab_block(span, raw_text)
+        ):
+            accepted.append(span)
+    return accepted
 
 
 def run_pipeline(input_dir: str, output_zip: str, config_path: str = "configs/default.yaml") -> None:
@@ -137,7 +170,7 @@ def run_pipeline(input_dir: str, output_zip: str, config_path: str = "configs/de
         if llm_extractor.enabled:
             llm_spans = llm_extractor.extract(record, sections)
             llm_mode = str(config.get("models", {}).get("llm", {}).get("mode", "consensus"))
-            spans.extend(filter_llm_spans(llm_spans, spans, llm_mode))
+            spans.extend(filter_llm_spans(llm_spans, spans, llm_mode, record.raw_text))
         if use_model and not use_rule:
             spans = link_spans(spans, record.raw_text, sections, store, config)
             spans = predict_assertions_for_spans(spans, record.raw_text, sections, config)

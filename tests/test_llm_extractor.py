@@ -82,3 +82,22 @@ def test_llm_consensus_rejects_unverified_entities():
     llm_spans = extractor.extract(record, [])
     local_spans = [llm_spans[0]]
     assert filter_llm_spans(llm_spans, local_spans, "consensus") == [llm_spans[0]]
+
+
+def test_llm_consensus_accepts_only_unverified_labs_inside_lab_blocks():
+    raw = "Kết quả xét nghiệm\nCystatin C: bình thường\nChẩn đoán\nCRP"
+    extractor = LlmExtractor({"enabled": True})
+    extractor._request = lambda _: """{
+      "entities": [
+        {"text":"Cystatin C", "position":[19,29], "type":"TÊN_XÉT_NGHIỆM", "assertions":[]},
+        {"text":"bình thường", "position":[31,42], "type":"KẾT_QUẢ_XÉT_NGHIỆM", "assertions":[]},
+        {"text":"CRP", "position":[53,56], "type":"TÊN_XÉT_NGHIỆM", "assertions":[]}
+      ]
+    }"""
+    llm_spans = extractor.extract(InputRecord("1", "1.txt", raw), [])
+    accepted = filter_llm_spans(llm_spans, [], "consensus_structured_labs", raw)
+
+    assert [(span.text, span.concept_type) for span in accepted] == [
+        ("Cystatin C", "lab_test"),
+        ("bình thường", "lab_result"),
+    ]
