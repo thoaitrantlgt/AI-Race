@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import re
 from pathlib import Path
 
 from src.assertion.assertion_rules import predict_assertions_for_spans
@@ -125,6 +126,23 @@ def _inside_structured_lab_block(span, raw_text: str) -> bool:
     return lab_heading > later_heading
 
 
+UNVERIFIED_LAB_RESULT_RE = re.compile(
+    r"^[<>]?[ \t]*\d+(?:[,.]\d+)?(?:[ \t]*(?:%|mg/dL|mmol/L|µmol/L|umol/L|g/L|g/dL|U/L|"
+    r"IU/L|ng/L|ng/mL|pg/mL|mEq/L|mmHg|10\^9/L|10\^12/L|K/uL|M/uL))?(?:[ \t]*\([^\n]{1,30}\))?$",
+    re.IGNORECASE,
+)
+UNVERIFIED_QUALITATIVE_RESULTS = {"âm tính", "dương tính", "bình thường", "tăng", "giảm"}
+
+
+def _safe_unverified_lab_span(span) -> bool:
+    text = span.text.strip()
+    if span.concept_type == "lab_test":
+        return 2 <= len(text) <= 100 and "\n" not in text
+    if span.concept_type == "lab_result":
+        return bool(UNVERIFIED_LAB_RESULT_RE.fullmatch(text)) or text.lower() in UNVERIFIED_QUALITATIVE_RESULTS
+    return False
+
+
 def filter_llm_spans(llm_spans, local_spans, mode: str, raw_text: str = ""):
     if mode == "augment":
         return llm_spans
@@ -138,6 +156,7 @@ def filter_llm_spans(llm_spans, local_spans, mode: str, raw_text: str = ""):
             mode == "consensus_structured_labs"
             and span.concept_type in {"lab_test", "lab_result"}
             and _inside_structured_lab_block(span, raw_text)
+            and _safe_unverified_lab_span(span)
         ):
             accepted.append(span)
     return accepted
