@@ -41,7 +41,7 @@ def _add_alias(store: TerminologyStore, alias: str, canonical: str, concept_id: 
         store.add_extraction_alias(alias, semantic_type)
 
 
-def load_custom_aliases(path: str | Path, store: TerminologyStore) -> None:
+def load_custom_aliases(path: str | Path, store: TerminologyStore, skip_rxnorm_bulk: bool = False) -> None:
     for row in BUILTIN_ALIASES:
         _add_alias(store, *row)
     root = Path(path)
@@ -49,6 +49,8 @@ def load_custom_aliases(path: str | Path, store: TerminologyStore) -> None:
         return
     files = [root] if root.is_file() else sorted(root.glob("*.tsv"))
     for file_path in files:
+        if skip_rxnorm_bulk and file_path.name.startswith("rxnorm_rxnav_"):
+            continue
         for line in file_path.read_text(encoding="utf-8-sig").splitlines():
             if not line.strip() or line.startswith("#"):
                 continue

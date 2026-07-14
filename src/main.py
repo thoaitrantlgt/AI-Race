@@ -75,11 +75,17 @@ def load_config(config_path: str | Path) -> dict:
 def build_terminology_store(config: dict) -> TerminologyStore:
     store = TerminologyStore()
     paths = config.get("paths", {})
-    load_rxnorm_to_store(paths.get("rxnorm_dir", "data/terminology/rxnorm_2026"), store)
+    rxnorm_dir = Path(paths.get("rxnorm_dir", "data/terminology/rxnorm_2026"))
+    has_official_rxnorm = (rxnorm_dir / "RXNCONSO.RRF").exists()
+    load_rxnorm_to_store(rxnorm_dir, store)
     load_icd10_vi_to_store(paths.get("icd10_vi_dir", "data/terminology/icd10_vi"), store)
     if config.get("linking", {}).get("enable_snomed", False):
         load_snomed_to_store(paths.get("snomed_dir", "data/terminology/snomed"), store)
-    load_custom_aliases(paths.get("alias_dir", "data/terminology/custom_aliases"), store)
+    load_custom_aliases(
+        paths.get("alias_dir", "data/terminology/custom_aliases"),
+        store,
+        skip_rxnorm_bulk=has_official_rxnorm,
+    )
     return store
 
 

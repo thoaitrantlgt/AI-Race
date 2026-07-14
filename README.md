@@ -127,6 +127,15 @@ For full RxNorm, place `RXNCONSO.RRF` at:
 data/terminology/rxnorm_2026/RXNCONSO.RRF
 ```
 
+The loader supports RxNorm ingredient, brand, clinical drug, branded drug,
+strength component, dose form, and pack term types. For the official
+`RxNorm_full_07062026.zip` release, extract only the required table:
+
+```bash
+tar --strip-components=1 -xf RxNorm_full_07062026.zip \
+  -C data/terminology/rxnorm_2026 rrf/RXNCONSO.RRF
+```
+
 Vietnamese ICD-10 TSV/CSV/JSON files belong under:
 
 ```text
